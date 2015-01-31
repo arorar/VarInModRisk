@@ -11,7 +11,7 @@ risk.calc <- function(alpha, method = NA, distribution = NA,
     norm.const <- 1; nu <- Inf
     ordinary <- modified <- c()
         
-    moments <- 
+    moments <-         
         if(method == "large-sample") {            
             if (distribution == "gaussian") central.moments("gaussian") 
             else if (distribution == "t") {
@@ -22,15 +22,22 @@ risk.calc <- function(alpha, method = NA, distribution = NA,
                 }   else NA        
             }
         }
-        else if (method == "small-sample") 
-            central.moments("small-sample", data=data)
+    else if (method == "small-sample") 
+        central.moments("small-sample", data=data)
     
-    quant <- risk.quantile(alpha, method, distribution, param, data)
+    if (method == "small-sample" && distribution == "t") {
+        mydt <- function(x, m, s, df) dt((x-m)/s, df)/s
+        fit <- fitdistr(data, mydt, start = list(df = 9), m = 0, s = 1, lower = 9, upper = 30)
+        param$nu <- nu <- as.integer(fit$estimate["df"])                    
+        norm.const <- sqrt((nu-2)/nu)
+    }
+    
+    quant <- risk.quantile(alpha, distribution, param)
     ordinary <- risk.ordinary(alpha, method=method, distribution=distribution, 
                               param=list(nu=nu), quantile=quant, moments=moments, 
                               etl=etl, C=norm.const)
     
-    quant <- risk.quantile(alpha, "large-sample", "gaussian", param, data)
+    quant <- risk.quantile(alpha, "gaussian", param)
     modified <- risk.modified(alpha,  method=method, distribution=distribution, 
                               quantile=quant, moments=moments, etl = etl)
     
@@ -45,10 +52,10 @@ risk.largesample.gaussian.efficiency <- function(etl=FALSE) {
     for(alpha in alphas)
     {
         val <- risk.calc(alpha, method="large-sample", distribution="gaussian", etl=etl)
-        efficiency.est <-  100*val$ordinary$est/val$modified$est
+        bias.est <-  100*(val$ordinary$est - val$modified$est)/val$ordinary$est
         efficiency.se  <-  100*val$ordinary$se/val$modified$se
-        grid <- matrix(c(alpha, efficiency.est, efficiency.se), nrow = 1)
-        colnames(grid) <- c("sign", "est.efficiency", "se.efficiency")         
+        grid <- matrix(c(alpha, bias.est, efficiency.se), nrow = 1)
+        colnames(grid) <- c("sign", "est.bias", "se.efficiency")         
         main.grid <- rbind(main.grid,grid)
     }
     
@@ -58,7 +65,7 @@ risk.largesample.gaussian.efficiency <- function(etl=FALSE) {
 risk.largesample.t.efficiency <- function(etl=FALSE) {
     
     alphas  <- seq(0.01,0.05,by=0.001)
-    nus <- seq(from = 10, to = 100, by = 2)
+    nus <- seq(from = 9, to = 30, by = 1)
     
     main.grid <- c()
     
@@ -70,15 +77,15 @@ risk.largesample.t.efficiency <- function(etl=FALSE) {
                                val <- risk.calc(alpha, method="large-sample", 
                                             distribution="t", param = param, 
                                             etl = etl)
-                               efficiency.est <-  
-                                   100*val$ordinary$est/val$modified$est
+                               bias.est <-  
+                                   100*(val$ordinary$est - val$modified$est)/val$ordinary$est
                                efficiency.se  <-  
                                    100*val$ordinary$se/val$modified$se
-                               c(nu, alpha, efficiency.est, efficiency.se)
+                               c(nu, alpha, bias.est, efficiency.se)
                            })
         
         grid <- t(val)        
-        colnames(grid) <- c("df","sign", "est.efficiency", "se.efficiency")         
+        colnames(grid) <- c("df","sign", "est.bias", "se.efficiency")         
         main.grid <- rbind(main.grid,grid)
     }
     
@@ -99,10 +106,10 @@ risk.smallsample.gaussian.efficiency <- function(etl=FALSE, seed=1234, size) {
         {
             val <- risk.calc(alpha, method="small-sample", 
                              distribution="gaussian", data=data, etl = etl)
-            efficiency.est <-  100*val$ordinary$est/val$modified$est
+            bias.est <-  100*(val$ordinary$est - val$modified$est)/val$ordinary$est
             efficiency.se  <-  100*val$ordinary$se/val$modified$se
-            grid <- matrix(c(alpha, efficiency.est, efficiency.se), nrow = 1)
-            colnames(grid) <- c("sign", "est.efficiency", "se.efficiency")         
+            grid <- matrix(c(alpha, bias.est, efficiency.se), nrow = 1)
+            colnames(grid) <- c("sign", "est.bias", "se.efficiency")         
             main.grid <- rbind(main.grid,grid)
         }
         
@@ -120,7 +127,7 @@ risk.smallsample.t.efficiency <- function(etl=FALSE, seed=99999, size) {
     temp.func <- function(size) {    
         
         alphas  <- seq(0.01,0.05,by=0.001)
-        nus <- seq(from = 10, to = 100, by = 2)    
+        nus <- seq(from = 9, to = 30, by = 1)    
         main.grid <- c()
         
         for(alpha in alphas)
@@ -130,17 +137,17 @@ risk.smallsample.t.efficiency <- function(etl=FALSE, seed=99999, size) {
                               set.seed(seed)    
                               data <- rt(size, df=nu)
                               val <- risk.calc(alpha, method="small-sample",
-                                               distribution="t", data=data, 
+                                               distribution="t", data=data, param=list(nu=nu),
                                                etl = etl)
-                              efficiency.est <-  
-                                  100*val$ordinary$est/val$modified$est
+                              bias.est <-  
+                                  100*(val$ordinary$est - val$modified$est)/val$ordinary$est
                               efficiency.se  <-  
                                   100*val$ordinary$se/val$modified$se
-                              c(size, nu, alpha, efficiency.est, efficiency.se)
+                              c(size, nu, alpha, bias.est, efficiency.se)
                           })
             
             grid <- t(val)        
-            colnames(grid) <- c("size", "df","sign", "est.efficiency", 
+            colnames(grid) <- c("size", "df","sign", "est.bias", 
                                 "se.efficiency")         
             main.grid <- rbind(main.grid,grid)
         }

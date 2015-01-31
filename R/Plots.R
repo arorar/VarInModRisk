@@ -14,7 +14,7 @@ plot.efficiency <- function(distribution, method, size = c(50, 100, 200),
             risk.smallsample.t.efficiency(etl, size = size)
         
         
-        drop.param <- if(se) "est.efficiency" else "se.efficiency"            
+        drop.param <- if(se) "est.bias" else "se.efficiency"            
         drop.param <- which(colnames(main.grid) == drop.param)
         data <- main.grid[,-drop.param]
         colnames(data) <-   
@@ -29,9 +29,9 @@ plot.efficiency <- function(distribution, method, size = c(50, 100, 200),
         data <- na.omit(data)
         
         y.lab <- if (se && !etl) expression(paste("%",frac(se(VaR),se(mVaR))))
-        else if (!se && !etl) expression(paste("%",frac(VaR,mVaR)))
-        else if (se &&   etl) expression(paste("%",frac(se(ETL),se(mETL))))
-        else if (!se &&  etl) expression(paste("%",frac(ETL,mETL)))
+        else if (!se && !etl) "% Relative Bias"
+        else if (se &&   etl) expression(paste("%",frac(se(ES),se(mES))))
+        else if (!se &&  etl) "% Relative Bias"
         
         
         fivep.label <- "5%"; onep.label <- "1%"        
@@ -45,8 +45,8 @@ plot.efficiency <- function(distribution, method, size = c(50, 100, 200),
                 data <- data[data[,"sign"] %in% sign.filter,]
                 ggplot(data, aes(x=df,y=param)) + 
                     geom_line(aes(color=as.factor(sign))) +
-                    scale_colour_manual(values = c("0.05"="red","0.01"="blue"), 
-                            labels=c("5%", "1%"), name="Tail Probability") +
+                    scale_colour_manual(values = c("0.01"="red","0.05"="blue"), 
+                            labels=c("1%", "5%"), name="Tail Probability") +
                     ylab(y.lab) + xlab(bquote(nu))
             }
         } else if (method == "small-sample") {  
@@ -75,11 +75,10 @@ plot.efficiency <- function(distribution, method, size = c(50, 100, 200),
         p
     }
     
-    risk <- if(etl) "ETL" else "VaR"
-    title <- paste(risk, " Efficiency(",
-                   ifelse(method == "large-sample", "Asymptotic","small-sample"),
-                   ") plots for", distribution,
-                   "distribution")
+    risk <- if(etl) "mES" else "mVaR"
+    title <- paste(risk, " bias and efficiency for ", 
+                   ifelse(distribution == "gaussian", "Normal","Student-t"),
+                   " distribution")
     p1 <- temp.func(se = FALSE); p2 <- temp.func()
     
     p <- if(distribution=="gaussian" && method == "large-sample") 

@@ -1,5 +1,5 @@
 
-factor <- function(z, distribution, param = NA, C = NA) {
+risk.factor <- function(z, distribution, param = NA, C = NA) {
     if(distribution == "gaussian") dnorm(z)
     else if(distribution == "t") {
         if ("nu" %in% names(param))  { 
@@ -14,7 +14,7 @@ factor <- function(z, distribution, param = NA, C = NA) {
 risk.ordinary <- function(alpha, method, distribution, param, quantile, moments, 
                           etl, C) {    
 
-    z   <- quantile; dz <- factor(z, distribution, param, C = C)
+    z   <- quantile; dz <- risk.factor(z, distribution, param, C = C)
     mu  <- moments["mu"];  mu2 <- moments["mu2"]
     mu3 <- moments["mu3"]; mu4 <- moments["mu4"]
     
