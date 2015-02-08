@@ -1,0 +1,12 @@
+Package: VarInModRisk
+Type: Package
+Title: Variability in Modified VaR and ETL
+Version: 1.0.0
+Author: Rohit Arora
+Maintainer: Rohit Arora <arorar@uw.edu>
+Description: Compute Variability in Modified VaR and ETL estimates. 
+                Analyze and plot the efficiency.
+License: Artistic-2.0
+LazyLoad: yes
+Depends: gridExtra, ggplot2, moments, roxygen2, MASS, sn, scales
+NeedsCompilation: yes

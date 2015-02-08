@@ -1,6 +1,6 @@
 rm(list=ls())
 
-# Gaussian large-sample
+# # Gaussian large-sample
 method <- "large-sample"; distribution <- "gaussian"
 p1 <- plot.efficiency(distribution = distribution, method = method, 
                       plot = FALSE, etl=FALSE)
@@ -16,6 +16,16 @@ p4 <-plot.efficiency(distribution = distribution, method = method,
                      plot = FALSE, etl=TRUE)
 
 grid.arrange(p3, p4, nrow=2,ncol=1)
+
+# skew-t large-sample
+method <- "large-sample"; distribution <- "skew-t"
+p3 <- plot.efficiency(distribution = distribution, method = method, 
+                      plot = FALSE, etl=FALSE)
+p4 <-plot.efficiency(distribution = distribution, method = method, 
+                     plot = FALSE, etl=TRUE)
+
+grid.arrange(p3, p4, nrow=2,ncol=1)
+
 
 # Gaussian small-sample
 method <- "small-sample"; distribution <- "gaussian"
@@ -35,3 +45,14 @@ p8 <-plot.efficiency(distribution = distribution, method = method,
                      plot = FALSE, etl=TRUE)
 
 grid.arrange(p7, p8, nrow=2,ncol=1)
+
+
+# # skew-t small-sample
+method <- "small-sample"; distribution <- "skew-t"
+p3 <- plot.efficiency(distribution = distribution, method = method, 
+                      plot = FALSE, etl=FALSE, size = c(500, 1000, 2000))
+p4 <-plot.efficiency(distribution = distribution, method = method, 
+                     plot = FALSE, etl=TRUE, size = c(500, 1000, 2000))
+
+grid.arrange(p3, p4, nrow=2,ncol=1)
+

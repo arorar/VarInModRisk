@@ -1,0 +1,25 @@
+export(
+    #Moments.R
+    gaussian.central.moment, 
+    student.t.central.moment, 
+    skew.t.central.moment,
+    central.moments,
+    #Plots.R
+    plot.efficiency, 
+    risk.modified,
+    #Quanttile.R
+    risk.quantile,
+    #Variance.R
+    risk.factor, 
+    risk.ordinary,
+    risk.modified,
+    #Risk.R
+    risk.calc,
+    risk.largesample.gaussian.efficiency,
+    risk.largesample.t.efficiency,
+    risk.largesample.skewt.efficiency,
+    risk.smallsample.gaussian.efficiency,
+    risk.smallsample.t.efficiency,
+    risk.smallsample.skewt.efficiency
+)
+

@@ -1,45 +1,57 @@
-
-risk.factor <- function(z, distribution, param = NA, C = NA) {
+risk.factor <- function(z, distribution, moments, param = NA, C = NA) {
     if(distribution == "gaussian") dnorm(z)
     else if(distribution == "t") {
         if ("nu" %in% names(param))  { 
             nu <- param$nu
             dt(sqrt(C)*z, df = nu - 2)/sqrt(C)
         } else NA
-    }
+    } else if(distribution == "skew-t") {
+        if (all(c("alpha","nu") %in% names(param)))  { 
+            alpha <-  param$alpha; nu <- param$nu
+            
+            delta <- alpha/sqrt(1+alpha^2)
+            b <- sqrt(nu/pi) * gamma(0.5*(nu - 1))/gamma(0.5*nu)
+            
+            term1 <- nu/(nu - 2); term2 <- b*delta 
+            den <- sqrt(term1 - term2^2)
+            xi <- -term2/den; omega <- 1/den
+            
+            mu  <- moments["mu"];  sigma <- sqrt(moments["mu2"])            
+            var <- mu + C*sigma*z
+            
+            integrand <- function(x, xi, omega, alpha, nu) {
+                x*dst(x,dp = c(xi = xi, omega = omega, alpha = alpha, nu = nu))
+            }
+            
+            -integrate(integrand, lower = -Inf, upper = var, xi = xi, omega = omega, 
+                      alpha = alpha, nu =nu)$value
+        } else NA
+    }    
 }
 
-# var.type should take care of which quantile to use
-# distribution takes care of the moments
-risk.ordinary <- function(alpha, method, distribution, param, quantile, moments, 
+risk.ordinary <- function(beta, method, distribution, param, quantile, moments, 
                           etl, C) {    
 
-    z   <- quantile; dz <- risk.factor(z, distribution, param, C = C)
+    z   <- quantile; dz <- risk.factor(z, distribution, moments, param, C = C)
     mu  <- moments["mu"];  mu2 <- moments["mu2"]
     mu3 <- moments["mu3"]; mu4 <- moments["mu4"]
     
-    sigma   <- sqrt(mu2) 
-    skew    <- mu3/mu2^(3/2) 
-    exkurt  <- mu4/mu2^2 - 3
-    
     sigma <- sqrt(mu2); skew <- mu3/mu2^(3/2); exkurt <- mu4/mu2^2 - 3
     
-    est <- if(!etl) mu + C*sigma*z else mu - C*sigma/alpha*dz        
+    est <- if(!etl) mu + C*sigma*z else mu - C*sigma/beta*dz        
     
     variance <- 
         if(!etl) 
             ((C*z)^2/2*(1+exkurt/2) + skew*C*z + 1 )*sigma^2 
         else
-            (((C*dz)^2*(exkurt + 2))/(4*alpha^2) - (C*dz*skew)/alpha + 1)*sigma^2 
+            (((C*dz)^2*(exkurt + 2))/(4*beta^2) - (C*dz*skew)/beta + 1)*sigma^2 
     
     names(est) <- names(variance) <- NULL
     
     list(est = est, se = sqrt(variance))
 }
 
-# var.type should take care of which quantile to use
-# distribution takes care of the moments
-risk.modified <- function(alpha, method, distribution, quantile, moments, etl) {
+risk.modified <- function(beta, method, distribution, quantile, moments, etl) {
 
     z   <-  quantile; dz <- dnorm(z)
     mu  <-  moments["mu"];  mu2 <- moments["mu2"]
@@ -56,12 +68,12 @@ risk.modified <- function(alpha, method, distribution, quantile, moments, etl) {
         mvar <- mu + sigma*factor
         mvar
     } else {
-        term1 <-  (dz*z^2)
+        term1 <-  (dz*z^3)
         term2 <-  (z^4 - 2*z^2 - 1)*dz
         term3 <-  (z^6 - 9*z^4 + 9*z^2 + 3)*dz        
         
         factor <- dz + (term1)*skew/6 + (term2)*exkurt/24 + (term3)*skew^2/72
-        metl <- mu - sigma/alpha*factor
+        metl <- mu - sigma/beta*factor
     }
         
     variance <-  if(!etl) 
@@ -90,54 +102,83 @@ risk.modified <- function(alpha, method, distribution, quantile, moments, etl) {
         3*exkurt*mu5*sigma^2) + 4*skew^4*sigma^8*z^2*(2*z^2 - 5)*(125*exkurt -
         50*exkurt*z^2 - 268*z^2 + 610))/(20736*sigma^6)
     else
-        (sigma^8*(dz^2*(225*skew^4*exkurt + 1026*skew^4 - 270*skew^2*exkurt^2 - 
-        4536*skew^2*exkurt - 12492*skew^2 + 81*exkurt^3 + 2178*exkurt^2 + 
-        16956*exkurt + 26892) + dz^2*z^4*(675*skew^4*exkurt + 3798*skew^4 - 
-        540*skew^2*exkurt^2 + 1440*skew^2*exkurt + 24696*skew^2 + 162*exkurt^3 + 
-        468*exkurt^2 - 5832*exkurt - 11016) + dz^2*z^8*(2475*skew^4*exkurt + 
-        16566*skew^4 - 990*skew^2*exkurt^2 - 16200*skew^2*exkurt - 32940*skew^2 + 
-        81*exkurt^3 + 882*exkurt^2 + 3132*exkurt + 3564) - 
-        dz^2*z^6*(3900*skew^4*exkurt + 24024*skew^4 - 2340*skew^2*exkurt^2 - 
-        29376*skew^2*exkurt - 59112*skew^2 + 324*exkurt^3 + 3528*exkurt^2 + 
-        12528*exkurt + 14256) + dz^2*z^2*(1350*skew^4*exkurt + 6876*skew^4 - 
-        1350*skew^2*exkurt^2 - 19656*skew^2*exkurt - 53964*skew^2 + 
-        324*exkurt^3 + 6120*exkurt^2 + 29808*exkurt + 40176) - 
-        dz^2*skew^2*z^12*(96*exkurt - 25*skew^2*exkurt - 194*skew^2 + 144) + 
-        6*dz^2*skew^2*z^10*(15*exkurt^2 - 542*skew^2 - 75*skew^2*exkurt + 
-        396*exkurt + 750)) + 36*dz^2*mu8 + 20736*alpha^2*sigma^8 - 
-        dz^2*z^6*(144*mu8 + 2592*mu5*sigma^3 - 288*mu7*sigma + 432*exkurt*mu5*sigma^3 - 
-        3888*skew^2*mu5*sigma^3) + dz^2*z^2*(144*mu8 + 6048*mu5*sigma^3 - 
-        288*mu7*sigma + 432*exkurt*mu5*sigma^3 - 1296*skew^2*mu5*sigma^3) + 
-        dz^2*z^4*(72*mu8 + 5184*mu5*sigma^3 - 576*mu7*sigma + 
-        864*exkurt*mu5*sigma^3 - 3888*skew^2*mu5*sigma^3) - 
-        288*alpha*dz*(72*sigma^8*z^2 - 6*mu5*sigma^3 - 
-        15*skew^3*sigma^7*sigma + 24*exkurt*sigma^8*z^2 + 
-        144*skew*sigma^7*sigma - 24*skew^2*sigma^8*z^2 - 12*mu5*z^2*sigma^3 + 
-        6*mu5*z^4*sigma^3 - 45*skew^3*sigma^7*z^2*sigma + 
-        45*skew^3*sigma^7*z^4*sigma - 5*skew^3*sigma^7*z^6*sigma + 
-        21*skew*exkurt*sigma^7*sigma + 180*skew*sigma^7*z^2*sigma - 
-        144*skew*sigma^7*z^4*sigma + 12*skew*sigma^7*z^6*sigma + 
-        54*skew*exkurt*sigma^7*z^2*sigma - 45*skew*exkurt*sigma^7*z^4*sigma + 
-        4*skew*exkurt*sigma^7*z^6*sigma) + dz^2*z^8*(36*mu8 - 
-        432*skew^2*mu5*sigma^3) - 4*dz^2*mu6*sigma^2*(27*exkurt + 
-        108*exkurt*z^2 + 54*exkurt*z^4 - 108*exkurt*z^6 + 27*exkurt*z^8 - 
-        81*skew^2 + 864*z^2 - 144*z^4 - 432*z^6 + 108*z^8 - 441*skew^2*z^2 - 
-        198*skew^2*z^4 + 1014*skew^2*z^6 - 561*skew^2*z^8 + 87*skew^2*z^10 -
-        4*skew^2*z^12 + 324) - 48*dz^2*skew*sigma*(3*mu7 + 15*mu7*z^2 +
-        6*mu7*z^4 - 26*mu7*z^6 + 11*mu7*z^8 - mu7*z^10 - 18*mu6*z^2*sigma - 
-        48*mu6*z^4*sigma + 42*mu6*z^6*sigma - 4*mu6*z^8*sigma) - 
-        8*dz^2*skew*mu5*sigma^3*(234*exkurt*z^6 - 135*exkurt*z^2 - 
-        54*exkurt*z^4 - 27*exkurt - 99*exkurt*z^8 + 9*exkurt*z^10 + 
-        45*skew^2 - 1314*z^2 + 540*z^4 + 1188*z^6 - 558*z^8 + 54*z^10 + 
-        270*skew^2*z^2 + 135*skew^2*z^4 - 780*skew^2*z^6 + 495*skew^2*z^8 - 
-        90*skew^2*z^10 + 5*skew^2*z^12 - 342) - 
-        48*dz^2*skew*sigma^7*z^2*sigma*(45*skew^2*exkurt*z^4 - 
-        5*skew^2*exkurt*z^6 - 45*skew^2*exkurt*z^2 - 15*skew^2*exkurt - 
-        42*skew^2*z^6 + 354*skew^2*z^4 - 330*skew^2*z^2 - 102*skew^2 - 
-        9*exkurt^2*z^4 + 18*exkurt^2*z^2 + 9*exkurt^2 + 24*exkurt*z^6 - 
-        282*exkurt*z^4 + 348*exkurt*z^2 + 210*exkurt + 36*z^6 - 540*z^4 + 
-        756*z^2 + 756))/(20736*alpha^2*sigma^6)
-        
+        (20736*beta^2*sigma^8 + 1440*beta*dz*skew^3*sigma^8*z^6 - 
+             12960*beta*dz*skew^3*sigma^8*z^4 + 12960*beta*dz*skew^3*sigma^8*z^2 + 
+             4320*beta*dz*skew^3*sigma^8 + 6912*beta*dz*skew^2*sigma^8*z^3 - 
+             1152*beta*dz*skew*exkurt*sigma^8*z^6 + 12960*beta*dz*skew*exkurt*sigma^8*z^4 - 
+             15552*beta*dz*skew*exkurt*sigma^8*z^2 - 6048*beta*dz*skew*exkurt*sigma^8 - 
+             3456*beta*dz*skew*sigma^8*z^6 + 41472*beta*dz*skew*sigma^8*z^4 - 
+             51840*beta*dz*skew*sigma^8*z^2 - 41472*beta*dz*skew*sigma^8 - 
+             6912*beta*dz*exkurt*sigma^8*z^3 - 20736*beta*dz*sigma^8*z^3 - 
+             1728*mu5*beta*dz*sigma^3*z^4 + 3456*mu5*beta*dz*sigma^3*z^2 + 
+             1728*mu5*beta*dz*sigma^3 + 25*dz^2*skew^4*exkurt*sigma^8*z^12 - 
+             450*dz^2*skew^4*exkurt*sigma^8*z^10 + 2475*dz^2*skew^4*exkurt*sigma^8*z^8 - 
+             3900*dz^2*skew^4*exkurt*sigma^8*z^6 + 675*dz^2*skew^4*exkurt*sigma^8*z^4 + 
+             1350*dz^2*skew^4*exkurt*sigma^8*z^2 + 225*dz^2*skew^4*exkurt*sigma^8 + 
+             194*dz^2*skew^4*sigma^8*z^12 - 3252*dz^2*skew^4*sigma^8*z^10 + 
+             16566*dz^2*skew^4*sigma^8*z^8 - 24024*dz^2*skew^4*sigma^8*z^6 + 
+             3798*dz^2*skew^4*sigma^8*z^4 + 6876*dz^2*skew^4*sigma^8*z^2 + 
+             1026*dz^2*skew^4*sigma^8 + 240*dz^2*skew^3*exkurt*sigma^8*z^9 - 
+             2160*dz^2*skew^3*exkurt*sigma^8*z^7 + 2160*dz^2*skew^3*exkurt*sigma^8*z^5 + 
+             720*dz^2*skew^3*exkurt*sigma^8*z^3 + 2016*dz^2*skew^3*sigma^8*z^9 - 
+             16992*dz^2*skew^3*sigma^8*z^7 + 15840*dz^2*skew^3*sigma^8*z^5 + 
+             4896*dz^2*skew^3*sigma^8*z^3 - 40*mu5*dz^2*skew^3*sigma^3*z^12 + 
+             720*mu5*dz^2*skew^3*sigma^3*z^10 - 3960*mu5*dz^2*skew^3*sigma^3*z^8 + 
+             6240*mu5*dz^2*skew^3*sigma^3*z^6 - 1080*mu5*dz^2*skew^3*sigma^3*z^4 - 
+             2160*mu5*dz^2*skew^3*sigma^3*z^2 - 360*mu5*dz^2*skew^3*sigma^3 + 
+             90*dz^2*skew^2*exkurt^2*sigma^8*z^10 - 990*dz^2*skew^2*exkurt^2*sigma^8*z^8 + 
+             2340*dz^2*skew^2*exkurt^2*sigma^8*z^6 - 540*dz^2*skew^2*exkurt^2*sigma^8*z^4 - 
+             1350*dz^2*skew^2*exkurt^2*sigma^8*z^2 - 270*dz^2*skew^2*exkurt^2*sigma^8 - 
+             96*dz^2*skew^2*exkurt*sigma^8*z^12 + 2376*dz^2*skew^2*exkurt*sigma^8*z^10 - 
+             16200*dz^2*skew^2*exkurt*sigma^8*z^8 + 29952*dz^2*skew^2*exkurt*sigma^8*z^6 + 
+             864*dz^2*skew^2*exkurt*sigma^8*z^4 - 19656*dz^2*skew^2*exkurt*sigma^8*z^2 - 
+             4536*dz^2*skew^2*exkurt*sigma^8 - 144*dz^2*skew^2*sigma^8*z^12 + 
+             4500*dz^2*skew^2*sigma^8*z^10 - 32940*dz^2*skew^2*sigma^8*z^8 + 
+             64296*dz^2*skew^2*sigma^8*z^6 + 19512*dz^2*skew^2*sigma^8*z^4 - 
+             53964*dz^2*skew^2*sigma^8*z^2 - 12492*dz^2*skew^2*sigma^8 - 
+             432*mu5*dz^2*skew^2*sigma^3*z^9 + 3888*mu5*dz^2*skew^2*sigma^3*z^7 - 
+             3888*mu5*dz^2*skew^2*sigma^3*z^5 - 1296*mu5*dz^2*skew^2*sigma^3*z^3 + 
+             16*mu6*dz^2*skew^2*sigma^2*z^12 - 348*mu6*dz^2*skew^2*sigma^2*z^10 + 
+             2244*mu6*dz^2*skew^2*sigma^2*z^8 - 4056*mu6*dz^2*skew^2*sigma^2*z^6 + 
+             792*mu6*dz^2*skew^2*sigma^2*z^4 + 1764*mu6*dz^2*skew^2*sigma^2*z^2 + 
+             324*mu6*dz^2*skew^2*sigma^2 + 432*dz^2*skew*exkurt^2*sigma^8*z^7 - 
+             864*dz^2*skew*exkurt^2*sigma^8*z^5 - 432*dz^2*skew*exkurt^2*sigma^8*z^3 - 
+             1152*dz^2*skew*exkurt*sigma^8*z^9 + 13536*dz^2*skew*exkurt*sigma^8*z^7 - 
+             16704*dz^2*skew*exkurt*sigma^8*z^5 - 10080*dz^2*skew*exkurt*sigma^8*z^3 - 
+             72*mu5*dz^2*skew*exkurt*sigma^3*z^10 + 792*mu5*dz^2*skew*exkurt*sigma^3*z^8 - 
+             1872*mu5*dz^2*skew*exkurt*sigma^3*z^6 + 432*mu5*dz^2*skew*exkurt*sigma^3*z^4 + 
+             1080*mu5*dz^2*skew*exkurt*sigma^3*z^2 + 216*mu5*dz^2*skew*exkurt*sigma^3 - 
+             1728*dz^2*skew*sigma^8*z^9 + 25920*dz^2*skew*sigma^8*z^7 - 
+             36288*dz^2*skew*sigma^8*z^5 - 36288*dz^2*skew*sigma^8*z^3 - 
+             432*mu5*dz^2*skew*sigma^3*z^10 + 4464*mu5*dz^2*skew*sigma^3*z^8 - 
+             10656*mu5*dz^2*skew*sigma^3*z^6 - 3168*mu5*dz^2*skew*sigma^3*z^4 + 
+             10512*mu5*dz^2*skew*sigma^3*z^2 + 2736*mu5*dz^2*skew*sigma^3 + 
+             192*mu6*dz^2*skew*sigma^2*z^9 - 2016*mu6*dz^2*skew*sigma^2*z^7 + 
+             2304*mu6*dz^2*skew*sigma^2*z^5 + 864*mu6*dz^2*skew*sigma^2*z^3 + 
+             48*mu7*dz^2*skew*sigma*z^10 - 528*mu7*dz^2*skew*sigma*z^8 + 
+             1248*mu7*dz^2*skew*sigma*z^6 - 288*mu7*dz^2*skew*sigma*z^4 - 
+             720*mu7*dz^2*skew*sigma*z^2 - 144*mu7*dz^2*skew*sigma + 
+             81*dz^2*exkurt^3*sigma^8*z^8 - 324*dz^2*exkurt^3*sigma^8*z^6 + 
+             162*dz^2*exkurt^3*sigma^8*z^4 + 324*dz^2*exkurt^3*sigma^8*z^2 + 
+             81*dz^2*exkurt^3*sigma^8 + 882*dz^2*exkurt^2*sigma^8*z^8 - 
+             3528*dz^2*exkurt^2*sigma^8*z^6 + 468*dz^2*exkurt^2*sigma^8*z^4 + 
+             6120*dz^2*exkurt^2*sigma^8*z^2 + 2178*dz^2*exkurt^2*sigma^8 + 
+             3132*dz^2*exkurt*sigma^8*z^8 - 15984*dz^2*exkurt*sigma^8*z^6 - 
+             2376*dz^2*exkurt*sigma^8*z^4 + 29808*dz^2*exkurt*sigma^8*z^2 + 
+             16956*dz^2*exkurt*sigma^8 - 432*mu5*dz^2*exkurt*sigma^3*z^7 + 
+             864*mu5*dz^2*exkurt*sigma^3*z^5 + 432*mu5*dz^2*exkurt*sigma^3*z^3 - 
+             108*mu6*dz^2*exkurt*sigma^2*z^8 + 432*mu6*dz^2*exkurt*sigma^2*z^6 - 
+             216*mu6*dz^2*exkurt*sigma^2*z^4 - 432*mu6*dz^2*exkurt*sigma^2*z^2 - 
+             108*mu6*dz^2*exkurt*sigma^2 + 3564*dz^2*sigma^8*z^8 - 19440*dz^2*sigma^8*z^6 - 
+             5832*dz^2*sigma^8*z^4 + 40176*dz^2*sigma^8*z^2 + 26892*dz^2*sigma^8 - 
+             2592*mu5*dz^2*sigma^3*z^7 + 5184*mu5*dz^2*sigma^3*z^5 + 
+             6048*mu5*dz^2*sigma^3*z^3 - 432*mu6*dz^2*sigma^2*z^8 + 
+             2304*mu6*dz^2*sigma^2*z^6 - 3456*mu6*dz^2*sigma^2*z^2 - 
+             1296*mu6*dz^2*sigma^2 + 288*mu7*dz^2*sigma*z^7 - 
+             576*mu7*dz^2*sigma*z^5 - 288*mu7*dz^2*sigma*z^3 + 36*mu8*dz^2*z^8 - 
+             144*mu8*dz^2*z^6 + 72*mu8*dz^2*z^4 + 144*mu8*dz^2*z^2 + 
+             36*mu8*dz^2)/(20736*beta^2*sigma^6)
+    
         names(est) <- names(variance) <- NULL
         list(est = est, se = sqrt(variance))
 }

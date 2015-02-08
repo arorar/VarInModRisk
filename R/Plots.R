@@ -8,10 +8,14 @@ plot.efficiency <- function(distribution, method, size = c(50, 100, 200),
             risk.largesample.gaussian.efficiency(etl) 
         else if (method == "large-sample" && distribution == "t")
             risk.largesample.t.efficiency(etl)
+        else if (method == "large-sample" && distribution == "skew-t")
+            risk.largesample.skewt.efficiency(etl)
         else if (method == "small-sample" && distribution == "gaussian")
             risk.smallsample.gaussian.efficiency(etl, size = size)
         else if (method == "small-sample" && distribution == "t")
             risk.smallsample.t.efficiency(etl, size = size)
+        else if (method == "small-sample" && distribution == "skew-t")
+            risk.smallsample.skewt.efficiency(etl, size = size)
         
         
         drop.param <- if(se) "est.bias" else "se.efficiency"            
@@ -21,9 +25,11 @@ plot.efficiency <- function(distribution, method, size = c(50, 100, 200),
             if (method == "large-sample") {
                 if (distribution == "gaussian") c("sign","param") 
                 else if (distribution == "t") c("df","sign","param")
+                else if (distribution == "skew-t") c("slant","df","sign","param")
             } else if (method == "small-sample") {
                 if (distribution == "gaussian") c("size","sign","param") 
                 else if (distribution == "t") c("size", "df", "sign", "param") 
+                else if (distribution == "skew-t") c("size","slant","df","sign","param")
             }
         
         data <- na.omit(data)
@@ -48,7 +54,20 @@ plot.efficiency <- function(distribution, method, size = c(50, 100, 200),
                     scale_colour_manual(values = c("0.01"="red","0.05"="blue"), 
                             labels=c("1%", "5%"), name="Tail Probability") +
                     ylab(y.lab) + xlab(bquote(nu))
+            } else if (distribution == "skew-t") {
+                sign.filter <- c(0.01,0.05)
+                data <- data[data[,"sign"] %in% sign.filter,]  
+                
+                ggplot(data, aes(x=df,y=param)) + facet_grid(sign~slant) + 
+                    geom_line(aes(color=as.factor(sign))) +
+                    scale_colour_manual(values = c("0.01"="red","0.05"="blue"), 
+                                        labels=c("1%", "5%"), name="Tail Probability") +
+                    scale_x_continuous(breaks=c(10,20,30)) + 
+                    scale_y_continuous(breaks=pretty_breaks(n=4)) + 
+                    ylab(y.lab) + xlab(bquote(nu))
+                
             }
+            
         } else if (method == "small-sample") {  
             
             size.col <- colors[1:length(size)]
@@ -69,6 +88,17 @@ plot.efficiency <- function(distribution, method, size = c(50, 100, 200),
                     geom_smooth(aes(color=as.factor(size)), se=FALSE, method=loess) + 
                     scale_colour_manual(values = size.col, labels=as.character(size), 
                                         name="Sample Size")
+            } else if (distribution == "skew-t") {
+                sign.filter <- c(0.01,0.05)
+                data <- data[data[,"sign"] %in% sign.filter,]             
+               
+                ggplot(data, aes(x=df,y=param)) + facet_grid(sign~slant) + 
+                    ylab(y.lab) + xlab(bquote(nu)) + 
+                    geom_smooth(aes(color=as.factor(size)), se=FALSE, method=loess) + 
+                    scale_x_continuous(breaks=c(10,20,30)) + 
+                    scale_y_continuous(breaks=pretty_breaks(n=4)) + 
+                    scale_colour_manual(values = size.col, labels=as.character(size), 
+                                        name="Sample Size")
             }
         }
         
@@ -77,7 +107,8 @@ plot.efficiency <- function(distribution, method, size = c(50, 100, 200),
     
     risk <- if(etl) "mES" else "mVaR"
     title <- paste(risk, " bias and efficiency for ", 
-                   ifelse(distribution == "gaussian", "Normal","Student-t"),
+                   ifelse(distribution == "gaussian", "Normal", 
+                          ifelse(distribution == "t", "Student-t","Standardized Skew-t")),
                    " distribution")
     p1 <- temp.func(se = FALSE); p2 <- temp.func()
     

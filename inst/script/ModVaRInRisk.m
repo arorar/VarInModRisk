@@ -122,7 +122,7 @@ function val = ITerm(k)
 
     if (isodd)    
         for i = 0:(k-1)/2            
-            sum = sum + z^(2*i)*prod(2*(0:(k-1)/2) + 1)/prod(2*(0:i) + 1);
+            sum = sum + z^(2*i + 1)*prod(2*(0:(k-1)/2) + 1)/prod(2*(0:i) + 1);
         end    
 
         term = prod(2*(0:(k-1)/2) + 1);
