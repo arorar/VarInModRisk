@@ -79,7 +79,7 @@ risk.calc <- function(beta, method = NA, distribution = NA,
 
 risk.largesample.gaussian.efficiency <- function(etl=FALSE) {
     
-    alphas  <- seq(0.01,0.05,by=0.04)
+    alphas  <- seq(0.01,0.05,by=0.001)
     main.grid <- c()
     
     for(alpha in alphas)
@@ -87,8 +87,8 @@ risk.largesample.gaussian.efficiency <- function(etl=FALSE) {
         val <- risk.calc(alpha, method="large-sample", distribution="gaussian", etl=etl)
         bias.est <-  100*(val$ordinary$est - val$modified$est)/val$ordinary$est
         efficiency.se  <-  100*val$ordinary$se/val$modified$se
-        grid <- matrix(c(alpha, bias.est, efficiency.se), nrow = 1)
-        colnames(grid) <- c("sign", "est.bias", "se.efficiency")         
+        grid <- matrix(c(alpha, bias.est, efficiency.se, val$ordinary$se,val$modified$se), nrow = 1)
+        colnames(grid) <- c("sign", "est.bias", "se.efficiency", "ordinary", "modified")         
         main.grid <- rbind(main.grid,grid)
     }
     
@@ -146,13 +146,11 @@ risk.largesample.skewt.efficiency <- function(etl=FALSE) {
                                   100*(val$ordinary$est - val$modified$est)/val$ordinary$est
                               efficiency.se  <-  
                                   100*val$ordinary$se/val$modified$se
-                              c(round(alpha), nu, beta, bias.est, efficiency.se,
-                                val$ordinary$est,val$modified$est)
+                              c(round(alpha), nu, beta, bias.est, efficiency.se)
                           })
             
             grid <- t(val)        
-            colnames(grid) <- c("slant", "df","sign", "est.bias", "se.efficiency", 
-                                "VaR", "mVaR")         
+            colnames(grid) <- c("slant", "df","sign", "est.bias", "se.efficiency")         
             main.grid <- rbind(main.grid,grid)
         }
     }
@@ -167,7 +165,7 @@ risk.smallsample.gaussian.efficiency <- function(etl=FALSE, seed=1234, size) {
     
     temp.func <- function(data) {
         
-        alphas  <- seq(0.01,0.05,by=0.04)
+        alphas  <- seq(0.01,0.05,by=0.001)
         main.grid <- c()
         
         for(alpha in alphas)
