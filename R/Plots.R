@@ -1,6 +1,6 @@
 colors <- c("red","blue", "green", "brown", "orange", "black", "grey", "purple")
 
-plot.efficiency <- function(distribution, method, size = c(50, 100, 200), 
+plot.efficiency <- function(distribution, method, size = c(200, 500, 1000), 
                             etl=FALSE, plot = TRUE) {
     
     temp.func <- function(se=TRUE) {
@@ -108,7 +108,7 @@ plot.efficiency <- function(distribution, method, size = c(50, 100, 200),
     risk <- if(etl) "mES" else "mVaR"
     title <- paste(risk, " bias and efficiency for ", 
                    ifelse(distribution == "gaussian", "Normal", 
-                          ifelse(distribution == "t", "Student-t","Standardized Skew-t")),
+                          ifelse(distribution == "t", "Standardized t","Standardized Skew-t")),
                    " distribution")
     p1 <- temp.func(se = FALSE); p2 <- temp.func()
     

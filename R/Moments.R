@@ -15,10 +15,10 @@ student.t.central.moment <- function(order, param) {
         nu <- param$nu 
         
         if(order %in% c(1,3,5,7)) 0
-        else if (order == 2) nu/(nu - 2)
-        else if (order == 4) (3*nu^2)/((nu - 2)*(nu - 4))
-        else if (order == 6) (15*nu^3)/((nu - 2)*(nu - 4)*(nu - 6))
-        else if (order == 8) (105*nu^4)/((nu - 2)*(nu - 4)*(nu - 6)*(nu - 8))
+        else if (order == 2) 1
+        else if (order == 4) 3*(nu - 2)/(nu - 4)
+        else if (order == 6) 15*(nu - 2)^2/((nu - 4)*(nu - 6))
+        else if (order == 8) 105*(nu - 2)^3/((nu - 4)*(nu - 6)*(nu - 8))
     } else NA
 }
 

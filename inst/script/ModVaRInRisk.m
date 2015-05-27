@@ -94,7 +94,7 @@ function val = ModVaRInRisk
     var_mVaR = simplify(combine(collect(collect(collect(N,z),sigma),g1)))/D;
 
     %VaR
-    M = S(1:2,1:2); y = [1 C*z];
+    M = S(1:2,1:2); y = [1 z];
     var_VaR = simplify(y*M*y.');
 
     %mETL
@@ -107,7 +107,7 @@ function val = ModVaRInRisk
     var_mETL = simplify(combine(collect(collect(collect(collect(N,dz),z),sigma),alpha_sig))/D);
 
     %ETL
-    M = S(1:2,1:2); y = 1/alpha_sig*[alpha_sig -C*dz];
+    M = S(1:2,1:2); y = 1/alpha_sig*[alpha_sig -dz];
     N = simplify(y*M*y.');
     var_ETL = simplify(collect(collect(N,dz),sigma));
     
@@ -116,7 +116,7 @@ end
 
 function val = ITerm(k)
 
-    syms z dz
+    syms z dz pz
     isodd = mod(k,2);
     sum = 0;
 
@@ -126,7 +126,7 @@ function val = ITerm(k)
         end    
 
         term = prod(2*(0:(k-1)/2) + 1);
-        val = dz*(sum - term);
+        val = dz*sum - pz*term;
     else
         for i = 1:(k/2)                    
             sum = sum + z^(2*i)*prod(2*(1:k/2))/prod(2*(1:i));

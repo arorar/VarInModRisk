@@ -9,7 +9,7 @@ risk.calc <- function(beta, method = NA, distribution = NA,
         if (method == "small-sample" && all(is.na(data))) return(NA)
     }
     
-    norm.const <- 1; nu <- Inf; alpha <- 0
+    nu <- Inf; alpha <- 0
     ordinary <- modified <- c()
         
     moments <-         
@@ -17,14 +17,12 @@ risk.calc <- function(beta, method = NA, distribution = NA,
             if (distribution == "gaussian") central.moments("gaussian") 
             else if (distribution == "t") {
                 if ("nu" %in% names(param))  { 
-                    nu <- param$nu 
-                    norm.const <- sqrt((nu-2)/nu)
+                    nu <- param$nu                     
                     central.moments("t",list(nu=nu))                    
                 }   else NA        
             } else if (distribution == "skew-t") {
                 if (all(c("alpha","nu") %in% names(param)))  { 
-                    alpha <-  param$alpha; nu <- param$nu 
-                    norm.const <- 1
+                    alpha <-  param$alpha; nu <- param$nu                     
                     central.moments("skew-t",list(alpha=alpha, nu=nu))                    
                 }   else NA        
             }
@@ -33,11 +31,19 @@ risk.calc <- function(beta, method = NA, distribution = NA,
         central.moments("small-sample", data=data)
     
     if (method == "small-sample" && distribution == "t") {
-        mydt <- function(x, m, s, df) dt((x-m)/s, df)/s
-        fit <- fitdistr(data, mydt, start = list(df = 9), m = 0, s = 1, 
-                        lower = 9, upper = 30)
-        param$nu <- nu <- as.integer(fit$estimate["df"])                    
-        norm.const <- sqrt((nu-2)/nu)
+        
+        loglik.t <- function(x, param) {
+            nu <- param[1]
+            -sum(log(dstd(x, nu=nu)))
+        }
+        
+        start <- c(9); lb <- c(9); ub <- c(30)
+        
+        fit.t <- 
+            optim(par = start, fn = loglik.t, x = data, method = "L-BFGS-B", 
+                  lower = lb, upper = ub, control=list(maxit=1000))
+        
+        param$nu    <- nu <- fit.t$par[1]                
     }
     
     if (method == "small-sample" && distribution == "skew-t") {
@@ -68,7 +74,7 @@ risk.calc <- function(beta, method = NA, distribution = NA,
     quant <- risk.quantile(beta, distribution, param)
     ordinary <- risk.ordinary(beta, method=method, distribution=distribution, 
                               param=list(alpha = alpha, nu=nu), quantile=quant, 
-                              moments=moments, etl=etl, C=norm.const)
+                              moments=moments, etl=etl)
     
     quant <- risk.quantile(beta, "gaussian", param)
     modified <- risk.modified(beta,  method=method, distribution=distribution, 
@@ -92,7 +98,7 @@ risk.largesample.gaussian.efficiency <- function(etl=FALSE) {
         main.grid <- rbind(main.grid,grid)
     }
     
-    data.frame(main.grid)
+    data.frame(round(main.grid,6))
 }
 
 risk.largesample.t.efficiency <- function(etl=FALSE) {
@@ -201,7 +207,7 @@ risk.smallsample.t.efficiency <- function(etl=FALSE, seed=99999, size) {
             val <- sapply(nus,  
                           function(nu) {
                               set.seed(seed)    
-                              data <- rt(size, df=nu)
+                              data <- rstd(size, nu=nu)
                               val <- risk.calc(alpha, method="small-sample",
                                                distribution="t", 
                                                data=data, param=list(nu=nu),

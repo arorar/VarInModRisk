@@ -7,8 +7,8 @@ risk.quantile <- function(beta, distribution = NA, param = NA) {
     if (distribution == "gaussian") qnorm(beta)
     else if (distribution == "t") {            
         if ("nu" %in% names(param))  { 
-            nu <- param$nu 
-            qt(p = beta, df = nu)
+            nu <- param$nu             
+            qstd(p = beta, nu = nu)
         }   else NA
     } else if (distribution == "skew-t") {            
         if (all(c("alpha","nu") %in% names(param)))  { 
