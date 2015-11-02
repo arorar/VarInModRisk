@@ -5,11 +5,10 @@ risk.calc <- function(beta, method = NA, distribution = NA,
     else {
         if (method == "large-sample" && is.na(distribution)) return(NA)
         if (method == "large-sample" && distribution == "t" && is.na(param)) return(NA)
-        if (method == "large-sample" && distribution == "skew-t" && is.na(param)) return(NA)
         if (method == "small-sample" && all(is.na(data))) return(NA)
     }
     
-    nu <- Inf; alpha <- 0
+    nu <- if ("nu" %in% names(param)) param$nu else Inf
     ordinary <- modified <- c()
         
     moments <-         
@@ -20,61 +19,28 @@ risk.calc <- function(beta, method = NA, distribution = NA,
                     nu <- param$nu                     
                     central.moments("t",list(nu=nu))                    
                 }   else NA        
-            } else if (distribution == "skew-t") {
-                if (all(c("alpha","nu") %in% names(param)))  { 
-                    alpha <-  param$alpha; nu <- param$nu                     
-                    central.moments("skew-t",list(alpha=alpha, nu=nu))                    
-                }   else NA        
-            }
+            } 
         }
-    else if (method == "small-sample") 
-        central.moments("small-sample", data=data)
+ 
+    if (method == "small-sample" && distribution == "gaussian") {
+        moments <- c(mean(data), var(data))
+        names(moments) <- c("mu", "mu2")
+    } 
     
     if (method == "small-sample" && distribution == "t") {
+        fit <- fitdistr(data, "t", df=nu)
+        moments <- fit$estimate; moments[2] <- (nu/(nu-2))*(moments[2])^2
+        names(moments) <- c("mu", "mu2")
+    } 
         
-        loglik.t <- function(x, param) {
-            nu <- param[1]
-            -sum(log(dstd(x, nu=nu)))
-        }
-        
-        start <- c(9); lb <- c(9); ub <- c(30)
-        
-        fit.t <- 
-            optim(par = start, fn = loglik.t, x = data, method = "L-BFGS-B", 
-                  lower = lb, upper = ub, control=list(maxit=1000))
-        
-        param$nu    <- nu <- fit.t$par[1]                
-    }
-    
-    if (method == "small-sample" && distribution == "skew-t") {
-        
-        loglik.skewt <- function(x, param) {
-            alpha <-  param[1]; nu <- param[2] 
-            
-            delta <- alpha/sqrt(1+alpha^2)
-            b <- sqrt(nu/pi) * gamma(0.5*(nu - 1))/gamma(0.5*nu)
-            
-            term1 <- nu/(nu - 2); term2 <- b*delta 
-            den <- sqrt(term1 - term2^2)
-            xi <- -term2/den; omega <- 1/den
-            
-            -sum(log(dst(x, dp=c(xi=xi, omega=omega, alpha=alpha, nu=nu))))
-        }
-        
-        start <- c(0, 9); lb <- c(-100, 9); ub <- c(100, 30)
-        
-        fit.skewt <- 
-            optim(par = start, fn = loglik.skewt, x = data, method = "L-BFGS-B", 
-                  lower = lb, upper = ub, control=list(maxit=1000))
-        
-        param$alpha <- alpha <- fit.skewt$par[1]
-        param$nu    <- nu    <- fit.skewt$par[2]        
-    }
     
     quant <- risk.quantile(beta, distribution, param)
     ordinary <- risk.ordinary(beta, method=method, distribution=distribution, 
-                              param=list(alpha = alpha, nu=nu), quantile=quant, 
+                              param=list(nu=nu), quantile=quant, 
                               moments=moments, etl=etl)
+    
+    if (method == "small-sample") 
+        moments <- central.moments("small-sample", data=data)
     
     quant <- risk.quantile(beta, "gaussian", param)
     modified <- risk.modified(beta,  method=method, distribution=distribution, 
@@ -91,7 +57,7 @@ risk.largesample.gaussian.efficiency <- function(etl=FALSE) {
     for(alpha in alphas)
     {
         val <- risk.calc(alpha, method="large-sample", distribution="gaussian", etl=etl)
-        bias.est <-  100*(val$ordinary$est - val$modified$est)/val$ordinary$est
+        bias.est <-  100*(val$modified$est - val$ordinary$est)/val$ordinary$est
         efficiency.se  <-  100*val$ordinary$se/val$modified$se
         grid <- matrix(c(alpha, bias.est, efficiency.se, val$ordinary$se,val$modified$se), nrow = 1)
         colnames(grid) <- c("sign", "est.bias", "se.efficiency", "ordinary", "modified")         
@@ -103,9 +69,8 @@ risk.largesample.gaussian.efficiency <- function(etl=FALSE) {
 
 risk.largesample.t.efficiency <- function(etl=FALSE) {
     
-    alphas  <- seq(0.01,0.05,by=0.04)
-    nus <- seq(from = 9, to = 30, by = 1)
-    
+    alphas  <- c(0.01, 0.025, 0.05)
+    nus <- seq(from = 9, to = 50, by = 1)  
     main.grid <- c()
     
     for(alpha in alphas)
@@ -117,7 +82,7 @@ risk.largesample.t.efficiency <- function(etl=FALSE) {
                                             distribution="t", param = param, 
                                             etl = etl)
                                bias.est <-  
-                                   100*(val$ordinary$est - val$modified$est)/val$ordinary$est
+                                   100*(val$modified$est - val$ordinary$est)/val$ordinary$est
                                efficiency.se  <-  
                                    100*val$ordinary$se/val$modified$se
                                c(nu, alpha, bias.est, efficiency.se)
@@ -131,158 +96,117 @@ risk.largesample.t.efficiency <- function(etl=FALSE) {
     data.frame(main.grid)
 }
 
-risk.largesample.skewt.efficiency <- function(etl=FALSE) {
+
+
+risk.smallsample.gaussian.efficiency <- function(etl=FALSE, seed=1234, replicates = 2500, size) {
     
-    betas  <- seq(0.01,0.05,by=0.04)
-    nus <- seq(from = 9, to = 30, by = 1)
+    cl <- makeCluster(detectCores())
+    clusterEvalQ(cl, library(foreach))
+    clusterEvalQ(cl, library(moments))
+    clusterSetRNGStream(cl, iseed = seed)
     
-    main.grid <- c()
-    st.alphas <- c(-20,10^-300,5,20)
+    registerDoSNOW(cl)
     
-    for(alpha in st.alphas) {
-        for(beta in betas) {
+    alphas  <- seq(0.01,0.05,by=0.001)
+    
+    grid <- foreach(samplesize =  size, .combine = rbind ) %do% {
+        
+        M <- matrix(rnorm(samplesize*replicates), nrow = replicates)
+        
+        blocks <- foreach(alpha =  alphas, .combine = rbind ) %dopar% {
             
-            val <- sapply(nus,  
-                          function(nu) {
-                              param <- list(alpha = alpha, nu=nu)
-                              val <- risk.calc(beta, method="large-sample", 
-                                               distribution="skew-t", 
-                                               param = param, etl = etl)
-                              bias.est <-  
-                                  100*(val$ordinary$est - val$modified$est)/val$ordinary$est
-                              efficiency.se  <-  
-                                  100*val$ordinary$se/val$modified$se
-                              c(round(alpha), nu, beta, bias.est, efficiency.se)
-                          })
+            #MLE estimator being unbiased we don't need small sample estimates
+            val1 <- risk.calc(alpha, method="large-sample", 
+                              distribution="gaussian", etl=etl)
             
-            grid <- t(val)        
-            colnames(grid) <- c("slant", "df","sign", "est.bias", "se.efficiency")         
-            main.grid <- rbind(main.grid,grid)
+            rows <- foreach(i =  1:replicates, .combine = rbind ) %do% {
+                
+                val2 <- risk.calc(alpha, method="small-sample", 
+                                 distribution="gaussian", data=M[i,], etl = etl)
+                
+                c(val2$ordinary$est, val2$modified$est)
+            }
+            
+            estOrdinary <- val1$ordinary$est; estModified <- rows[,2]
+            bias <- mean(100*(estModified - estOrdinary)/estOrdinary)
+            
+            estOrdinary <- rows[,1]
+            efficiency <- 100*sd(estOrdinary)/sd(estModified)
+            c(bias, efficiency)
         }
+
+        data.frame(size = rep(samplesize, length(alphas)), sign = alphas,
+                   est.bias = blocks[,1], se.efficiency = blocks[,2])
     }
     
-    data.frame(main.grid)
+    stopCluster(cl)
+    rownames(grid) <- NULL
+    grid
 }
 
-risk.smallsample.gaussian.efficiency <- function(etl=FALSE, seed=1234, size) {
+
+risk.smallsample.t.efficiency <- function(etl=FALSE, seed=99999, size, 
+                                          replicates = 2500) {
     
     set.seed(seed)
-    norm.data <- sapply(size,rnorm)
     
-    temp.func <- function(data) {
-        
-        alphas  <- seq(0.01,0.05,by=0.001)
-        main.grid <- c()
-        
-        for(alpha in alphas)
-        {
-            val <- risk.calc(alpha, method="small-sample", 
-                             distribution="gaussian", data=data, etl = etl)
-            bias.est <-  100*(val$ordinary$est - val$modified$est)/val$ordinary$est
-            efficiency.se  <-  100*val$ordinary$se/val$modified$se
-            grid <- matrix(c(alpha, bias.est, efficiency.se), nrow = 1)
-            colnames(grid) <- c("sign", "est.bias", "se.efficiency")         
-            main.grid <- rbind(main.grid,grid)
-        }
-        
-        main.grid
-    }
+    alphas  <- c(0.01, 0.025, 0.05)
     
-    x <- lapply(norm.data, temp.func)
-    main.grid <- lapply(1:length(size), function(i) cbind(size=size[i],x[[i]]))
-    main.grid <- do.call(rbind,main.grid)    
-    data.frame(main.grid)    
-}
-
-risk.smallsample.t.efficiency <- function(etl=FALSE, seed=99999, size) {
-
-    temp.func <- function(size) {    
+    nus <- seq(from = 9, to = 50, by = 1)  
+    
+    cl <- makeCluster(detectCores())
+    clusterEvalQ(cl, library(foreach))
+    clusterEvalQ(cl, library(moments))
+    clusterEvalQ(cl, library(MASS))
+    clusterSetRNGStream(cl, iseed = seed)
+    
+    registerDoSNOW(cl)
+    
+    temp.func <- function(nu) { 
         
-        alphas  <- seq(0.01,0.05,by=0.04)
-        nus <- seq(from = 9, to = 30, by = 1)    
-        main.grid <- c()
-        
-        for(alpha in alphas)
-        {
-            val <- sapply(nus,  
-                          function(nu) {
-                              set.seed(seed)    
-                              data <- rstd(size, nu=nu)
-                              val <- risk.calc(alpha, method="small-sample",
-                                               distribution="t", 
-                                               data=data, param=list(nu=nu),
-                                               etl = etl)
-                              bias.est <-  
-                                  100*(val$ordinary$est - val$modified$est)/val$ordinary$est
-                              efficiency.se  <-  
-                                  100*val$ordinary$se/val$modified$se
-                              c(size, nu, alpha, bias.est, efficiency.se)
-                          })
+        main.grid <- lapply(size, function(samplesize) {
             
-            grid <- t(val)        
-            colnames(grid) <- c("size", "df","sign", "est.bias", 
-                                "se.efficiency")         
-            main.grid <- rbind(main.grid,grid)
-        }
-        
-        main.grid
-    }
-    
-    main.grid <- lapply(size, temp.func)
-    main.grid <- do.call(rbind,main.grid)    
-    data.frame(main.grid)  
-}
-
-risk.smallsample.skewt.efficiency <- function(etl=FALSE, seed=99999, size) {
-    
-    temp.func <- function(size) {    
-        betas  <- seq(0.01,0.05,by=0.04)
-        nus <- seq(from = 9, to = 30, by = 1)    
-        main.grid <- c()
-        
-        st.alphas <- c(-20,10^-300,5,20)
-        
-        for(alpha in st.alphas) {
-            for(beta in betas)
-            {
-                val <- sapply(nus,  
-                              function(nu) {
-                                  set.seed(seed)    
-                                                                                               
-                                  delta <- alpha/sqrt(1+alpha^2)
-                                  b <- sqrt(nu/pi) * 
-                                      gamma(0.5*(nu - 1))/gamma(0.5*nu)
-                                  
-                                  term1 <- nu/(nu - 2); term2 <- b*delta 
-                                  den <- sqrt(term1 - term2^2)
-                                  xi <- -term2/den; omega <- 1/den
-                                  
-                                  data <- rst(size, xi = xi, omega = omega, 
-                                              alpha = alpha, nu = nu)
-                                  val <- risk.calc(beta, method="small-sample",
-                                                   distribution="skew-t", 
-                                                   data=data, 
-                                                   param=list(alpha=alpha, nu=nu),
-                                                   etl = etl)
-                                  bias.est <-  
-                                      100*(val$ordinary$est - val$modified$est)/val$ordinary$est
-                                  efficiency.se  <-  
-                                      100*val$ordinary$se/val$modified$se
-                                  c(size, round(alpha), nu, beta, bias.est, 
-                                    efficiency.se)
-                              })
+            M <- matrix(rt(samplesize*replicates, df=nu), nrow = replicates)
+            
+            val <- foreach(alpha =  alphas, .combine = rbind ) %do% {
                 
-                grid <- t(val)        
-                colnames(grid) <- c("size", "slant", "df","sign", "est.bias", 
-                                    "se.efficiency")         
-                main.grid <- rbind(main.grid,grid)
+                val1 <- risk.calc(alpha, method="large-sample", 
+                                  distribution="t", param = list(nu=nu), 
+                                  etl = etl)
+                rows <- 
+                    foreach(i =  1:replicates, .combine = rbind) %do% {
+                        
+                        val2 <- risk.calc(alpha, method="small-sample",
+                                         distribution="t", 
+                                         data= M[i,], param=list(nu=nu),
+                                         etl = etl)
+                        
+                        c(val2$ordinary$est, val2$modified$est)
+                    }
+                
+                
+                estOrdinary <- val1$ordinary$est; estModified <- rows[,2]
+                bias <- mean(100*(estModified - estOrdinary)/estOrdinary)
+                
+                estOrdinary <- rows[,1]
+                efficiency <- 100*sd(estOrdinary)/sd(estModified)
+                c(samplesize, nu, alpha, bias, efficiency)
             }
-        }
+            
+            rownames(val) <- NULL
+            colnames(val) <- c("size", "df","sign", "est.bias", 
+                               "se.efficiency")         
+            val
+        })
         
+        main.grid <- do.call(rbind, main.grid)
+        rownames(main.grid) <- NULL
         main.grid
     }
     
-    main.grid <- lapply(size, temp.func)
+    main.grid <- parLapply(cl, nus, temp.func)
+    stopCluster(cl)
+    
     main.grid <- do.call(rbind,main.grid)    
     data.frame(main.grid)  
 }

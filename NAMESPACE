@@ -2,7 +2,6 @@ export(
     #Moments.R
     gaussian.central.moment, 
     student.t.central.moment, 
-    skew.t.central.moment,
     central.moments,
     #Plots.R
     plot.efficiency, 
@@ -17,9 +16,7 @@ export(
     risk.calc,
     risk.largesample.gaussian.efficiency,
     risk.largesample.t.efficiency,
-    risk.largesample.skewt.efficiency,
     risk.smallsample.gaussian.efficiency,
-    risk.smallsample.t.efficiency,
-    risk.smallsample.skewt.efficiency
+    risk.smallsample.t.efficiency
 )
 
